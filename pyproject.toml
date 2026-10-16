@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tiny-pairvc"
+version = "0.1.0"
+description = "PairVC: a tiny causal, real-time voice converter trained on paired (teacher-converted) speech."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "soundfile>=0.12",
+  "torch>=2.4",
+]
+
+[project.scripts]
+pairvc-train = "pairvc.train:main"
+pairvc-convert = "pairvc.convert:main"
+pairvc-export = "pairvc.export:main"
+
+[project.optional-dependencies]
+onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
+dev = ["pytest>=8", "ruff>=0.9", "nbformat>=5.10", "onnx>=1.16", "onnxruntime>=1.18"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pairvc"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+extend-exclude = ["notebooks/*.ipynb"]  # generated from src/ by notebooks/build_notebook.py

@@ -1,0 +1,2 @@
+# Notebooks are generated from src/ by notebooks/build_notebook.py
+*.ipynb linguist-generated
