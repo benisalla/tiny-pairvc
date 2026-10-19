@@ -10,7 +10,9 @@ The ONNX graph converts ONE chunk (20 ms by default). Its inputs and outputs:
  -> audio_out  float32 [1, chunk]       converted chunk (lookahead-delayed)
     state_out_i                         feed back as state_in_i for the next chunk
 
-`run_onnx_streaming` shows the loop; `--verify` checks ONNX == PyTorch.
+The file's metadata stores sample_rate, n_speakers and lookahead_samples (read
+by pairvc.realtime). `run_onnx_streaming` shows the loop; `--verify` checks
+ONNX == PyTorch.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ import argparse
 import logging
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -26,6 +29,9 @@ from torch import Tensor, nn
 
 from pairvc.convert import load_model
 from pairvc.model import PairVC
+
+if TYPE_CHECKING:
+    import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +48,9 @@ class StreamingWrapper(nn.Module):
         return (out, *new_states)
 
 
-def export_onnx(model: PairVC, path: Path, chunk_samples: int, opset: int = 18) -> list[str]:
+def export_onnx(
+    model: PairVC, path: Path, chunk_samples: int, opset: int = 18, sample_rate: int = 16_000
+) -> list[str]:
     """Write the one-chunk streaming graph to `path`. Returns the state input names."""
     model = model.cpu().eval()
     states = model.init_state(1)
@@ -58,7 +66,25 @@ def export_onnx(model: PairVC, path: Path, chunk_samples: int, opset: int = 18) 
             opset_version=opset, dynamo=True,  # fixed shapes: the chunk size is part of the graph
             external_data=False,  # one self-contained .onnx file (the weights are ~38 MB)
         )  # fmt: skip
+    write_metadata(path, sample_rate=sample_rate, n_speakers=model.config.n_speakers,
+                   lookahead_samples=model.config.lookahead_samples)  # fmt: skip
     return state_in
+
+
+def write_metadata(path: Path, **values: int) -> None:
+    """Store integers in the ONNX file's metadata (what a player needs to know)."""
+    import onnx
+
+    graph = onnx.load(str(path))
+    for key, value in values.items():
+        entry = graph.metadata_props.add()
+        entry.key, entry.value = key, str(value)
+    onnx.save(graph, str(path))
+
+
+def read_metadata(session: ort.InferenceSession) -> dict[str, int]:
+    """The integers written by `write_metadata` ({} for an older export)."""
+    return {k: int(v) for k, v in session.get_modelmeta().custom_metadata_map.items()}
 
 
 def run_onnx_streaming(path: Path, audio: np.ndarray, speaker: int) -> np.ndarray:
@@ -97,7 +123,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     model, sample_rate = load_model(args.checkpoint)
     hop = model.config.hop_length
     chunk = max(hop, round(args.chunk_ms * sample_rate / 1000 / hop) * hop)
-    states = export_onnx(model, args.output, chunk, args.opset)
+    states = export_onnx(model, args.output, chunk, args.opset, sample_rate)
     logger.info("wrote %s (chunk %d samples, %d state tensors)", args.output, chunk, len(states))
 
     if args.verify:

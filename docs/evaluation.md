@@ -57,7 +57,7 @@ model, sr = load_model("checkpoints/run/best.pt")
 results = evaluate_split(model, "data/val", sr, dnsmos=DNSMOS())
 print(results_table(results))
 
-compare(converted_audio, teacher_audio, sr)   # one clip: {"mcd_db", "f0_rmse_cents", ...}
+compare(converted_audio, teacher_audio, sr)  # one clip: {"mcd_db", "f0_rmse_cents", ...}
 ```
 
 [`examples/05_evaluate.py`](../examples/05_evaluate.py) builds the README's

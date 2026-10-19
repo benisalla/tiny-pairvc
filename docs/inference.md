@@ -94,3 +94,40 @@ converted = run_onnx_streaming("pairvc.onnx", audio_numpy_float32, speaker=0)
 `run_onnx_streaming` in `src/pairvc/export.py` is a 15-line reference loop to
 port to C++, C#, Rust, etc. onnxruntime on one CPU thread converts a 20 ms
 chunk in about 6 ms (RTF ≈ 0.3, measured on one thread of a desktop CPU).
+
+## 5. Live: microphone in, converted voice out
+
+[`pairvc.realtime`](../src/pairvc/realtime.py) wraps the ONNX graph for a live
+app. The ONNX file stores its sample rate, number of voices and lookahead in
+its metadata, so a player needs nothing else.
+
+```python
+from pairvc.realtime import LiveConverter
+
+live = LiveConverter("pairvc.onnx", speaker=0, rate=48_000)  # the sound card's / browser's rate
+out_frame = live.process(mic_frame)  # float32 mono, any length -> same length
+live.speaker = 1  # switch voice on the fly
+live.stats.mean_ms, live.stats.rtf, live.latency_ms
+```
+
+Each call resamples the frame to the model's rate with a streaming FIR
+resampler (block-by-block == whole signal, tested), converts every complete
+20 ms chunk with `OnnxStreamer`, resamples back and returns a frame of the same
+size. The output queue starts with one chunk of silence, so latency is
+**chunk + lookahead + ~1 ms of filters ≈ 61 ms**, plus the audio device's own
+buffers.
+
+The playground app uses it on every WebRTC audio frame (48 kHz, 20 ms):
+
+```bash
+pip install -e '.[app]'
+streamlit run app/streamlit_app.py
+```
+
+- *Record or upload*: converts a clip with `OnnxStreamer.convert` (chunk by
+  chunk, exactly the live output) and plots the compute time of every chunk
+  against its 20 ms budget.
+- *Live microphone*: `streamlit-webrtc` sends the microphone to the server,
+  `LiveConverter` converts it, and the result plays back in the browser. Use
+  headphones. On a remote server the browser needs HTTPS (or localhost) for the
+  microphone, and WebRTC may need a TURN server behind strict NATs.

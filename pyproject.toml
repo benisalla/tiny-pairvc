@@ -29,6 +29,7 @@ pairvc-eval = "pairvc.evaluate:main"
 [project.optional-dependencies]
 onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.2"]
 examples = ["matplotlib>=3.7", "pillow>=10"]
+app = ["streamlit>=1.39", "streamlit-webrtc>=0.47", "onnx>=1.16", "onnxruntime>=1.18", "matplotlib>=3.7"]
 dev = ["pytest>=8", "ruff>=0.9", "nbformat>=5.10", "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.2"]
 
 [tool.hatch.build.targets.wheel]

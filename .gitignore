@@ -8,6 +8,7 @@ checkpoints/
 converted/
 data/
 *.onnx
+!assets/pairvc_digits.onnx
 *.wav
 !assets/**/*.wav
 examples/output/

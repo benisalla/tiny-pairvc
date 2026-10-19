@@ -82,9 +82,40 @@ Listen (16 kHz wav):
 | "one" | [source](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_source.wav) | [untrained](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice0_untrained.wav) · [**trained**](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice0_trained.wav) · [teacher](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice0_teacher.wav) | [untrained](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice1_untrained.wav) · [**trained**](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice1_trained.wav) · [teacher](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/1_theo_3_voice1_teacher.wav) |
 | "two" | [source](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_source.wav) | [untrained](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice0_untrained.wav) · [**trained**](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice0_trained.wav) · [teacher](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice0_teacher.wav) | [untrained](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice1_untrained.wav) · [**trained**](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice1_trained.wav) · [teacher](https://github.com/benisalla/tiny-pairvc/raw/main/assets/audio/2_theo_14_voice1_teacher.wav) |
 
-> **No pretrained weights are published.** You train PairVC on your own paired
-> data (see [docs/data.md](docs/data.md)); a checkpoint is then saved in
-> `checkpoints/run/`.
+> **No pretrained voice converter is published**, only the small demo model
+> above ([`assets/pairvc_digits.onnx`](assets/pairvc_digits.onnx), 3 MB, for the
+> app). You train PairVC on your own paired data (see [docs/data.md](docs/data.md));
+> a checkpoint is then saved in `checkpoints/run/`.
+
+## Try it: the playground app (live microphone)
+
+A small [Streamlit](https://streamlit.io) app runs the exported ONNX model
+**20 ms at a time**, the way a live voice changer (or StreamVC) does: every
+chunk is converted as soon as it arrives, using the model's memory of the past.
+
+```bash
+pip install -e '.[app]'
+streamlit run app/streamlit_app.py      # opens http://localhost:8501
+```
+
+- **Record or upload**: record yourself in the browser, upload a file or pick a
+  demo clip; it is converted chunk by chunk, with the time each 20 ms chunk took
+  against its 20 ms budget, and spectrograms of input and output.
+- **Live microphone**: your microphone → PairVC → your headphones, in real time
+  over WebRTC (48 kHz, 20 ms frames, resampled to 16 kHz and back). Switch the
+  target voice while you talk; *Bypass* lets you compare with your own voice.
+
+![playground app](assets/app.png)
+
+![live mode](assets/app_live.png)
+
+*Live mode, measured with Chrome's fake microphone on a busy CPU: 3.6 ms of
+compute per 20 ms chunk (RTF 0.18), ≈ 61 ms latency (20 ms chunk + 40 ms
+lookahead + 1 ms resampling) plus the browser's own audio buffers.* It uses the
+demo model by default (breathy, see above); pick your own export
+(`pairvc-export ... --output my.onnx`) in the sidebar. The same loop without the
+app: [`pairvc.realtime.LiveConverter`](src/pairvc/realtime.py) and
+[example 08](examples/08_live_voice_changer.py).
 
 ## Quick start
 
@@ -128,6 +159,7 @@ runnable on a CPU ([examples/README.md](examples/README.md)):
 | 05 | [05_evaluate.py](examples/05_evaluate.py) | metrics before vs after training, with baselines (MCD, F0, DNSMOS) |
 | 06 | [06_export_onnx.py](examples/06_export_onnx.py) | streaming ONNX export, run with onnxruntime |
 | 07 | [07_before_after_demo.py](examples/07_before_after_demo.py) | the visuals and audio of this README |
+| 08 | [08_live_voice_changer.py](examples/08_live_voice_changer.py) | the app's live loop: 48 kHz, 20 ms frames in, converted frames out (ONNX) |
 
 ## Documentation
 
@@ -136,7 +168,7 @@ runnable on a CPU ([examples/README.md](examples/README.md)):
 | [notebooks/train_colab_kaggle.ipynb](notebooks/train_colab_kaggle.ipynb) | **Train on a free Kaggle or Colab GPU**: self-contained notebook, same config, live dashboard, listen to the results |
 | [docs/data.md](docs/data.md) | What paired data is, the folder layout, how to build it with a teacher model |
 | [docs/training.md](docs/training.md) | Train on CPU, one GPU, several GPUs, several machines (torchrun, SLURM); resume; memory; every flag |
-| [docs/inference.md](docs/inference.md) | Convert files, stream chunk by chunk, export to ONNX for real-time apps |
+| [docs/inference.md](docs/inference.md) | Convert files, stream chunk by chunk, export to ONNX, the live app |
 | [docs/evaluation.md](docs/evaluation.md) | `pairvc-eval`: MCD, F0 error, voicing, DNSMOS; baselines; limits of each metric |
 | [docs/testing.md](docs/testing.md) | Unit tests, the overfit sanity check, what each test proves |
 | [docs/architecture.md](docs/architecture.md) | How the model, streaming, losses and discriminators work, with tensor shapes |
@@ -154,10 +186,12 @@ src/pairvc/            the package (read in this order)
   train.py             GAN training loop: bf16, DDP, checkpoints, audio samples, CLI
   convert.py           inference CLI: file -> converted file (offline or streaming)
   export.py            streaming ONNX export + onnxruntime loop
+  realtime.py          live conversion with ONNX: 20 ms chunks, streaming resampler, any frame size
   metrics.py           MCD, YIN pitch error, voicing, mel L1, DNSMOS
   evaluate.py          pairvc-eval: score a checkpoint against the teacher, with baselines
-examples/              numbered runnable scripts (build data, train, convert, stream, evaluate, export, demo)
-assets/                README figures, GIF, audio and results (made by examples/07 and 05)
+app/streamlit_app.py   playground: record/upload or live microphone, through the ONNX model
+examples/              numbered runnable scripts (build data, train, convert, stream, evaluate, export, demo, live)
+assets/                README figures, GIF, audio, results, demo ONNX model (made by examples/07, 05, 06)
 notebooks/             Kaggle / Colab training notebook (+ the script that builds it from src/)
 tests/                 pytest suite (CPU only, offline, synthetic data)
 docs/                  guides
@@ -174,10 +208,10 @@ LICENSE                MIT
 - [x] Kaggle / Colab notebook (runs end to end on synthetic data)
 - [x] Objective metrics (`pairvc-eval`): MCD, F0 error, voicing, DNSMOS, with baselines
 - [x] Real-speech demo on CPU (spoken digits, unseen speaker): before/after visuals, audio, metrics
+- [x] Playground app: record/upload or live microphone through the ONNX model, 20 ms chunks
 - [ ] Full-size model on GPU until the converted pitch is clean (notebook, `USE_DIGITS_DATA = True`)
 - [ ] Full training run on real teacher-converted data, with listening tests
 - [ ] Speaker similarity (speaker-verification model) and CER (ASR model) metrics
-- [ ] Live microphone demo (sounddevice + the ONNX graph)
 
 ## License
 

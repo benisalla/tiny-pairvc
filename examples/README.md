@@ -20,6 +20,7 @@ README results come from.
 | 05 | [05_evaluate.py](05_evaluate.py) | metrics table: before vs after training, no conversion, teacher (MCD, F0, DNSMOS) | ~1 min |
 | 06 | [06_export_onnx.py](06_export_onnx.py) | streaming ONNX export, run with onnxruntime, compare with PyTorch | seconds |
 | 07 | [07_before_after_demo.py](07_before_after_demo.py) | the README visuals: spectrograms before/after, training GIF, curves, audio clips | ~1 min |
+| 08 | [08_live_voice_changer.py](08_live_voice_changer.py) | live voice changer loop (what the app runs): 48 kHz 20 ms frames through the ONNX model | seconds |
 
 ```bash
 pip install -e '.[dev,examples]'   # examples = matplotlib + pillow, only for example 07
@@ -30,6 +31,8 @@ python examples/04_stream_in_real_time.py
 python examples/05_evaluate.py
 python examples/06_export_onnx.py
 python examples/07_before_after_demo.py
+python examples/08_live_voice_changer.py   # uses assets/pairvc_digits.onnx (or --onnx examples/output/pairvc.onnx)
+streamlit run app/streamlit_app.py         # the same, live, in the browser: pip install -e '.[app]'
 ```
 
 Examples 03–07 take `--checkpoint` / `--run` to point at another run, e.g. a
