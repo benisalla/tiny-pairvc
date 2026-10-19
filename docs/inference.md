@@ -131,3 +131,21 @@ streamlit run app/streamlit_app.py
   `LiveConverter` converts it, and the result plays back in the browser. Use
   headphones. On a remote server the browser needs HTTPS (or localhost) for the
   microphone, and WebRTC may need a TURN server behind strict NATs.
+
+## 6. In the browser (the demo page)
+
+[`index.html`](../index.html) + [`site/`](../site) is a static page (GitHub
+Pages, served from the repository root) that runs the same ONNX file with
+[onnxruntime-web](https://onnxruntime.ai/docs/tutorials/web/): `site/app.js`
+is the chunk loop (state tensors fed back each call) and `site/io-worklet.js`
+cuts the microphone into 20 ms chunks and plays the converted ones from a
+2-chunk queue (live latency ≈ 100 ms + the audio device). Measured in headless
+Chrome on one thread: ~6–7 ms per 20 ms chunk, and the converted demo clip
+equals the PyTorch output (max difference 3e-4). To try it locally:
+
+```bash
+python -m http.server 8000     # from the repository root, then open http://localhost:8000
+```
+
+To show your own model, replace `assets/pairvc_digits.onnx` (a 20 ms export,
+16 kHz, lookahead 640 samples, as set at the top of `site/app.js`).

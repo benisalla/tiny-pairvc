@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PairVC demo</title>
+  <meta name="description" content="PairVC: a tiny causal voice converter that runs 20 ms at a time. Results, audio samples and a live demo running in your browser.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23b03a6f%27/%3E%3Cpath d=%27M6 16h3l2-6 3 12 3-9 2 5 2-2h5%27 stroke=%27white%27 stroke-width=%272.4%27 fill=%27none%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="site/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+  <script src="site/app.js" defer></script>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">tiny-pairvc</p>
+    <h1>PairVC: real-time voice conversion, 20 ms at a time</h1>
+    <p class="lead">
+      A small, fully causal neural network that turns speech into a target voice
+      <b>while you speak</b>. It learns from <b>paired data</b>: the same speech
+      already converted by a big, slow "teacher" model, which it learns to
+      reproduce at a fraction of the cost.
+    </p>
+    <div class="badges">
+      <div><b>20 ms</b><span>chunk</span></div>
+      <div><b>60 ms</b><span>latency</span></div>
+      <div><b>RTF 0.29</b><span>1 CPU thread</span></div>
+      <div><b>9.6M / 0.67M</b><span>params (full / demo)</span></div>
+    </div>
+    <nav>
+      <a href="#try">Try it</a><a href="#listen">Listen</a><a href="#results">Results</a>
+      <a href="#how">How it works</a><a href="https://github.com/benisalla/tiny-pairvc">Code on GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="try">
+  <h2>Try it in your browser</h2>
+  <p>
+    The trained demo model (<a href="assets/pairvc_digits.onnx">3 MB ONNX file</a>) runs <b>here, on your
+    device</b>, with <a href="https://onnxruntime.ai/docs/tutorials/web/">onnxruntime-web</a>: no server,
+    nothing is uploaded. Like StreamVC, audio goes through the model in 20 ms chunks, and the model keeps a
+    memory of the past between chunks.
+  </p>
+  <div class="note">
+    <b>Set your expectations:</b> this demo model is small (0.67M parameters) and was trained for 1.5 h on a
+    CPU, on people saying the digits "zero" to "nine". It has learned each voice's <i>timbre</i>, but not yet
+    clean <i>pitch</i>, so the output sounds breathy. Digits work best.
+  </div>
+
+  <label class="field">Target voice <select id="voice"></select></label>
+
+  <div class="cards">
+    <article class="card">
+      <h3>Convert a clip</h3>
+      <p>Convert a demo clip, a recording or a file, chunk by chunk, exactly as a live stream would.</p>
+      <div class="row">
+        <select id="demo-clip"></select>
+        <button id="convert-demo">Convert demo clip</button>
+      </div>
+      <div class="row">
+        <button id="record">● Record</button>
+        <label class="button secondary">Upload audio<input id="upload" type="file" accept="audio/*" hidden></label>
+      </div>
+      <p id="clip-status" class="status" aria-live="polite"></p>
+    </article>
+
+    <article class="card">
+      <h3>Live microphone</h3>
+      <p>Your microphone → PairVC → your headphones, in real time. <b>Use headphones</b>, or the speakers
+        will feed back into the microphone. Works in Chrome, Edge and Safari.</p>
+      <div class="row">
+        <button id="live">▶ Start live conversion</button>
+        <label class="check"><input id="bypass" type="checkbox"> bypass (hear yourself, same delay)</label>
+      </div>
+      <p id="live-status" class="status" aria-live="polite"></p>
+      <div id="live-stats" class="stats"></div>
+    </article>
+  </div>
+
+  <div id="clip-results" hidden>
+    <div class="pair">
+      <figure>
+        <figcaption>Input</figcaption>
+        <audio id="clip-in-audio" controls></audio>
+        <canvas id="clip-in-spec" class="spec"></canvas>
+      </figure>
+      <figure>
+        <figcaption id="clip-out-title">Converted</figcaption>
+        <audio id="clip-out-audio" controls></audio>
+        <canvas id="clip-out-spec" class="spec"></canvas>
+      </figure>
+    </div>
+    <h3>Is it real time? Compute time of every 20 ms chunk, in this browser</h3>
+    <div id="clip-stats" class="stats"></div>
+    <canvas id="clip-times" class="times"></canvas>
+    <p class="muted">Every bar must stay under the dashed line (20 ms) to keep up with a microphone.
+      Spectrograms: 0–8 kHz, time →.</p>
+  </div>
+</section>
+
+<section id="listen">
+  <h2>Listen: before and after training</h2>
+  <p>
+    Three recordings of a speaker the model <b>never heard in training</b>, converted to two target voices.
+    "Before training" is the same network with random weights. The "teacher" column is the target the model
+    is trying to reproduce: here, a pitch shift of +5 or −5 semitones.
+  </p>
+  <div id="listen-grid" class="clips"></div>
+</section>
+
+<section id="results">
+  <h2>Results</h2>
+  <p>
+    80 held-out pairs from an <b>unseen speaker</b>, compared with the teacher's output. The demo model was
+    trained for 3500 steps (~1.5 h on a CPU: 2500 steps with the spectral loss only, then 1000 GAN steps) on
+    the <a href="https://github.com/Jakobovski/free-spoken-digit-dataset">Free Spoken Digit Dataset</a>.
+  </p>
+  <div class="table-scroll"><table id="metrics"></table></div>
+  <dl class="glossary">
+    <div><dt>MCD</dt><dd>mel cepstral distortion: the distance in timbre (spectral envelope) to the teacher. Lower is better.</dd></div>
+    <div><dt>DNSMOS</dt><dd>a neural network that predicts listening-test scores from 1 to 5. The 8 kHz source recordings cap it near 2.3.</dd></div>
+    <div><dt>F0 RMSE</dt><dd>pitch error in cents (100 cents = 1 semitone). Not converting at all scores ≈ 500 here.</dd></div>
+    <div><dt>voicing</dt><dd>share of frames where both clips agree on voiced, unvoiced or silent.</dd></div>
+  </dl>
+  <div class="verdict">
+    <div><h3>Learned</h3><p>Timing, silences and each voice's timbre: MCD falls from 6.5 to <b>2.7 dB</b>, so the
+      output is closer to the teacher than the original recording is.</p></div>
+    <div><h3>Not yet</h3><p>Clean harmonics at the new pitch: the output is breathy, and the pitch error stays near
+      "no conversion". The next step is the full 9.6M model trained on a GPU.</p></div>
+  </div>
+
+  <h3>Training, step by step</h3>
+  <img src="assets/training.gif" alt="Spectrogram of the validation clip at every evaluation during training, next to the source, the teacher and the validation loss" loading="lazy">
+  <p class="muted">The validation clip at every evaluation: source, PairVC at that step, teacher, and the validation loss.</p>
+
+  <h3>Spectrograms before and after training</h3>
+  <img src="assets/before_after.png" alt="Log-mel spectrograms of the source, PairVC before training, PairVC after training and the teacher, for both voices" loading="lazy">
+
+  <h3>Training curves</h3>
+  <img src="assets/training_curves.png" alt="Training and validation mel loss, and GAN losses, over the training steps" loading="lazy">
+
+  <h3>Streaming speed (PyTorch, 1 CPU thread)</h3>
+  <div class="stats">
+    <div class="stat"><span>chunk</span><b>20 ms</b></div>
+    <div class="stat"><span>real-time factor</span><b>0.29</b></div>
+    <div class="stat"><span>slowest chunk</span><b>10.2 ms</b></div>
+    <div class="stat"><span>latency</span><b>60 ms</b></div>
+    <div class="stat"><span>streaming vs offline</span><b>identical</b></div>
+  </div>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <ol class="flow">
+    <li><b>Make pairs, once and offline.</b> A big, slow teacher model converts many source clips into each target
+      voice, which gives the same speech in two voices.</li>
+    <li><b>Train the student.</b> PairVC learns to turn the source into the teacher's output, sample for sample. It is
+      trained as a GAN: a multi-scale mel loss plus HiFi-GAN-style discriminators.</li>
+    <li><b>Stream.</b> A causal encoder compresses each 20 ms of audio (320 samples) into one 64-number frame. A mirrored
+      decoder rebuilds the waveform in the target voice, steered by a speaker embedding (FiLM). The model only looks
+      40 ms ahead, so the voice comes out 60 ms late.</li>
+    <li><b>Ship.</b> One ONNX file converts one chunk and passes its memory (state tensors) on to the next call. This
+      page runs exactly that loop.</li>
+  </ol>
+  <p>
+    Code, training (CPU, GPU, multi-GPU, Kaggle notebook), metrics and a Streamlit app are on
+    <a href="https://github.com/benisalla/tiny-pairvc">GitHub</a>.
+  </p>
+</section>
+
+</main>
+<footer class="wrap muted">PairVC · MIT license · Free Spoken Digit Dataset (CC BY-SA 4.0) · all audio on this page is in the repository</footer>
+</body>
+</html>

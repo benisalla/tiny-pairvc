@@ -7,6 +7,9 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c.svg)](https://pytorch.org)
 [![ONNX](https://img.shields.io/badge/export-ONNX-005ced.svg)](docs/inference.md#4-onnx-real-time-outside-pytorch)
 
+**[▶ Live demo page](https://benisalla.github.io/tiny-pairvc/)**: listen to the results, see every metric,
+and try the model on your own voice. It runs in your browser, 20 ms at a time, with nothing to install.
+
 PairVC turns your voice into one of N target voices, **live**: it is a fully
 causal waveform-to-waveform network (9.6M parameters) that converts audio
 **20 ms at a time on one CPU core** (6–11 ms per chunk), with 60 ms total
@@ -190,6 +193,7 @@ src/pairvc/            the package (read in this order)
   metrics.py           MCD, YIN pitch error, voicing, mel L1, DNSMOS
   evaluate.py          pairvc-eval: score a checkpoint against the teacher, with baselines
 app/streamlit_app.py   playground: record/upload or live microphone, through the ONNX model
+index.html, site/      GitHub Pages demo: results, audio, and the ONNX model running in the browser
 examples/              numbered runnable scripts (build data, train, convert, stream, evaluate, export, demo, live)
 assets/                README figures, GIF, audio, results, demo ONNX model (made by examples/07, 05, 06)
 notebooks/             Kaggle / Colab training notebook (+ the script that builds it from src/)
@@ -209,6 +213,7 @@ LICENSE                MIT
 - [x] Objective metrics (`pairvc-eval`): MCD, F0 error, voicing, DNSMOS, with baselines
 - [x] Real-speech demo on CPU (spoken digits, unseen speaker): before/after visuals, audio, metrics
 - [x] Playground app: record/upload or live microphone through the ONNX model, 20 ms chunks
+- [x] Demo web page (GitHub Pages): metrics, audio, in-browser live conversion with onnxruntime-web
 - [ ] Full-size model on GPU until the converted pitch is clean (notebook, `USE_DIGITS_DATA = True`)
 - [ ] Full training run on real teacher-converted data, with listening tests
 - [ ] Speaker similarity (speaker-verification model) and CER (ASR model) metrics
