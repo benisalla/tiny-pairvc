@@ -1,6 +1,6 @@
 """Build notebooks/train_colab_kaggle.ipynb: a self-contained training notebook.
 
-The code of src/pairvc/{config,data,model,losses,discriminators,train}.py is
+The code of src/pairvc/{config,data,digits,model,losses,discriminators,train,metrics,evaluate}.py is
 copied into the notebook at build time (imports between those modules are
 removed, as everything lives in one namespace), so the notebook is identical to
 the package and needs no GitHub access. Regenerate after changing src/pairvc:
@@ -76,13 +76,14 @@ repo's `pairvc-convert`, `pairvc-export` and `pairvc-train --resume`.
 | Session limit | 12 h per session, 30 h GPU / week | ~12 h, can disconnect when idle |
 | Checkpoints kept in | `/kaggle/working` (saved with "Save Version") | Google Drive if `USE_GOOGLE_DRIVE = True` |
 
-**No data yet?** Set `USE_TOY_DATA = True` (or `SMOKE_TEST = True`): the
-notebook writes a tiny synthetic paired dataset so every cell can be tried.
-A model trained on it will not convert real voices.
+**No data yet?** Set `USE_DIGITS_DATA = True`: the notebook builds a small
+*real speech* paired dataset (spoken digits, with a pitch-shift "teacher": the
+repo's README results). Or `USE_TOY_DATA = True` / `SMOKE_TEST = True`: a tiny
+synthetic dataset so every cell can be tried quickly.
 
 **Sections:** 1. Install · 2. Config · 3. Data · 4. Model · 5. Losses &
 discriminators · 6. Training code · 7. Live dashboard · 8. Train · 9. Results
-(curves, listen, streaming speed) · 10. Download the trained model
+(curves, listen, streaming speed, objective metrics: MCD, F0, DNSMOS) · 10. Download the trained model
 """)
 
 # ---------------------------------------------------------------------------
@@ -138,6 +139,7 @@ from pathlib import Path
 
 SMOKE_TEST = False          # True = tiny quick check of the whole notebook (toy data, tiny model)
 USE_TOY_DATA = False        # True = synthetic paired data instead of yours
+USE_DIGITS_DATA = False     # True = real spoken digits + a pitch-shift teacher (downloads 16 MB)
 USE_GOOGLE_DRIVE = False    # Colab only: data + checkpoints on Drive (survive disconnects)
 DATA_DIR = None             # None = find it automatically (Kaggle input, /content/data, ./data)
 RESUME = True               # continue from last.pt in OUTPUT_DIR if it exists
@@ -176,8 +178,8 @@ def find_data_dir() -> Path | None:
     return None
 
 
-if SMOKE_TEST or USE_TOY_DATA:
-    DATA_DIR = None  # written in section 3, once write_toy_dataset is defined
+if SMOKE_TEST or USE_TOY_DATA or USE_DIGITS_DATA:
+    DATA_DIR = None  # written in section 3, once write_toy_dataset / write_digits_dataset are defined
 elif DATA_DIR is None:
     DATA_DIR = find_data_dir()
     if DATA_DIR is None:
@@ -185,7 +187,7 @@ elif DATA_DIR is None:
             "No paired data found. Add your dataset as input (Kaggle) / set DATA_DIR, "
             "or set USE_TOY_DATA = True to try the notebook on synthetic data."
         )
-print("data:", DATA_DIR or "toy data (synthetic)")
+print("data:", DATA_DIR or ("spoken digits" if USE_DIGITS_DATA and not SMOKE_TEST else "toy data (synthetic)"))
 
 # --- device, precision, batch size ------------------------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -215,6 +217,8 @@ train_config = TrainConfig(
     log_every=50,
     eval_every=1000,
 )
+if USE_DIGITS_DATA and not SMOKE_TEST:
+    data_config = dataclasses.replace(data_config, segment_samples=8000)  # a digit lasts ~0.5 s
 
 if SMOKE_TEST:
     OUTPUT_DIR = OUTPUT_DIR.parent / "smoke-test"  # never mixed with a real run
@@ -244,8 +248,17 @@ md(f"""
 {module_doc("data")}
 """)
 code(module_source("data"))
+md(f"""
+### 3.2 Real speech without a teacher model (same as `src/pairvc/digits.py`)
+
+{module_doc("digits")}
+""")
+code(module_source("digits"))
 code("""
-if DATA_DIR is None:  # toy data requested
+if DATA_DIR is None and USE_DIGITS_DATA and not SMOKE_TEST:
+    DATA_DIR = write_digits_dataset(Path("digits_data"))
+    data_config = dataclasses.replace(data_config, data_dir=DATA_DIR)
+elif DATA_DIR is None:  # toy data requested
     DATA_DIR = write_toy_dataset(Path("toy_data"), n_clips=64 if not SMOKE_TEST else 8, seconds=1.0)
     data_config = dataclasses.replace(data_config, data_dir=DATA_DIR)
 
@@ -265,13 +278,13 @@ print(f"train: {len(train_dataset):,} pairs | validation: {len(val_dataset):,} p
 """)
 
 md("""
-### 3.2 Look at (and listen to) one pair
+### 3.3 Look at (and listen to) one pair
 The source on top, the teacher's conversion below: the model learns to turn
 the first into the second.
 """)
 code("""
 import matplotlib.pyplot as plt
-from IPython.display import Audio, display
+from IPython.display import Audio, Markdown, display
 
 
 def show_spectrogram(audio: torch.Tensor, ax, title: str, sample_rate: int) -> None:
@@ -562,6 +575,34 @@ print(f"RTF {rtf:.3f} on 1 CPU thread | mean {1000 * sum(times) / len(times):.1f
       f"{1000 * (chunk + model_config.lookahead_samples) / data_config.sample_rate:.0f} ms (chunk + lookahead)")
 """)
 
+md(f"""
+### 9.4 Objective metrics (same as `src/pairvc/metrics.py` and `src/pairvc/evaluate.py`)
+
+{module_doc("metrics")}
+
+{module_doc("evaluate")}
+""")
+code(module_source("metrics"))
+code(module_source("evaluate"))
+code("""
+subprocess.call([sys.executable, "-m", "pip", "install", "-q", "onnxruntime"])  # for DNSMOS
+try:
+    dnsmos = DNSMOS()
+except Exception as error:  # no internet / no onnxruntime: the other metrics still work
+    print("DNSMOS unavailable:", error)
+    dnsmos = None
+
+val_dir = Path(data_config.data_dir) / data_config.val_split
+torch.manual_seed(train_config.seed)
+untrained_model = PairVC(best_model.config).to(device)
+before = evaluate_split(untrained_model, val_dir, data_config.sample_rate, limit=100, dnsmos=dnsmos)
+after = evaluate_split(best_model, val_dir, data_config.sample_rate, limit=100, dnsmos=dnsmos, baselines=False)
+results = {"no conversion": before["no conversion"], "PairVC, untrained": before["PairVC"],
+           "PairVC, trained": after["PairVC"], "teacher": before["teacher"]}
+(OUTPUT_DIR / "eval_results.json").write_text(json.dumps(results, indent=2))
+display(Markdown(results_table(results)))
+""")
+
 # ---------------------------------------------------------------------------
 md("""
 ## 10. Download the trained model
@@ -585,7 +626,7 @@ torch.save({k: best[k] for k in ("generator", "model_config", "data_config", "st
 with tempfile.TemporaryDirectory() as tmp:
     bundle = Path(tmp) / "bundle"
     bundle.mkdir()
-    for name in ["pairvc_generator.pt", "metrics.json", "training_curves.png"]:
+    for name in ["pairvc_generator.pt", "metrics.json", "eval_results.json", "training_curves.png"]:
         if (OUTPUT_DIR / name).exists():
             shutil.copy(OUTPUT_DIR / name, bundle / name)
     archive = shutil.make_archive(str(OUTPUT_DIR.parent / "tiny-pairvc-run"), "zip", bundle)

@@ -1,0 +1,42 @@
+{
+  "no conversion": {
+    "mcd_db": 6.533412549327963,
+    "f0_rmse_cents": 524.7975809086107,
+    "voicing_agreement": 0.9412676043826054,
+    "median_f0_hz": 120.7152926835613,
+    "mel_l1": 0.4760567517040391,
+    "dnsmos_sig": 2.6226295113563536,
+    "dnsmos_bak": 3.2256988167762755,
+    "dnsmos_ovrl": 2.174802565574646
+  },
+  "PairVC, untrained": {
+    "mcd_db": 12.620637527739564,
+    "f0_rmse_cents": 2379.69792254223,
+    "voicing_agreement": 0.37408485410959164,
+    "median_f0_hz": 571.4285714285714,
+    "mel_l1": 2.238364504549548,
+    "dnsmos_sig": 1.1408783107995988,
+    "dnsmos_bak": 1.1503614887595177,
+    "dnsmos_ovrl": 1.1460247367620469
+  },
+  "PairVC, trained": {
+    "mcd_db": 2.701224835449812,
+    "f0_rmse_cents": 433.67944281212465,
+    "voicing_agreement": 0.7400147279336018,
+    "median_f0_hz": 1.4598540145985401,
+    "mel_l1": 0.30978874850753957,
+    "dnsmos_sig": 2.0935755133628846,
+    "dnsmos_bak": 3.5871215969324113,
+    "dnsmos_ovrl": 1.8797711580991745
+  },
+  "teacher": {
+    "mcd_db": 0.0,
+    "f0_rmse_cents": 0.0,
+    "voicing_agreement": 1.0,
+    "median_f0_hz": 135.45731609759022,
+    "mel_l1": 0.0,
+    "dnsmos_sig": 2.577201634645462,
+    "dnsmos_bak": 3.653576800227165,
+    "dnsmos_ovrl": 2.2730328544974325
+  }
+}

@@ -24,10 +24,12 @@ dependencies = [
 pairvc-train = "pairvc.train:main"
 pairvc-convert = "pairvc.convert:main"
 pairvc-export = "pairvc.export:main"
+pairvc-eval = "pairvc.evaluate:main"
 
 [project.optional-dependencies]
-onnx = ["onnx>=1.16", "onnxruntime>=1.18"]
-dev = ["pytest>=8", "ruff>=0.9", "nbformat>=5.10", "onnx>=1.16", "onnxruntime>=1.18"]
+onnx = ["onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.2"]
+examples = ["matplotlib>=3.7", "pillow>=10"]
+dev = ["pytest>=8", "ruff>=0.9", "nbformat>=5.10", "onnx>=1.16", "onnxruntime>=1.18", "onnxscript>=0.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pairvc"]

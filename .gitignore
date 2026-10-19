@@ -9,3 +9,7 @@ converted/
 data/
 *.onnx
 *.wav
+!assets/**/*.wav
+examples/output/
+digits_data/
+toy_data/

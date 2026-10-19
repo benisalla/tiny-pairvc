@@ -126,6 +126,9 @@ class TrainConfig:
     lambda_adv: float = 1.0  # adversarial loss weight
     lambda_fm: float = 2.0  # feature-matching loss weight
     lambda_mel: float = 15.0  # multi-scale mel loss weight
+    # Mel loss only before this step: the discriminators are skipped (~3x faster
+    # steps on CPU) while the generator learns the coarse sound; 0 = GAN from the start.
+    gan_start_step: int = 0
     precision: str = "auto"  # "auto" | "fp32" | "bf16"
     grad_checkpointing: bool = False  # less GPU memory, ~30% slower
     num_workers: int = 4

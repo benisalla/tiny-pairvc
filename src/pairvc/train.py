@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import logging
 import math
 import os
@@ -64,6 +65,7 @@ logger = logging.getLogger(__name__)
 
 LAST_CHECKPOINT = "last.pt"
 BEST_CHECKPOINT = "best.pt"
+HISTORY_FILE = "history.jsonl"  # every logged train / val event, one JSON object per line
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +262,12 @@ def gan_step(
     config: TrainConfig,
     lookahead: int,
     amp_dtype: torch.dtype | None,
+    use_gan: bool = True,
 ) -> dict[str, Tensor]:
     """One discriminator update then one generator update. Returns detached metrics.
+
+    With `use_gan=False` (the mel-only warm-up, see TrainConfig.gan_start_step)
+    the discriminators are skipped and the generator learns from the mel loss alone.
 
     `discriminator` may be DDP-wrapped (its update is all-reduced);
     `raw_discriminator` is the same network unwrapped, used in the generator
@@ -273,6 +279,17 @@ def gan_step(
     with autocast(device, amp_dtype):
         prediction = generator(batch["source"], batch["speaker"])
     prediction, target = align_with_lookahead(prediction.float(), batch["target"], lookahead)
+    if not use_gan:
+        mel = mel_loss(prediction, target)
+        optim_g.zero_grad(set_to_none=True)
+        (config.lambda_mel * mel).backward()
+        g_grad = clip_gradients(generator, config.grad_clip)
+        optim_g.step()
+        zero = torch.zeros((), device=device)
+        return {
+            "d_loss": zero, "d_real": zero, "d_fake": zero, "g_loss": config.lambda_mel * mel.detach(),
+            "adv": zero, "fm": zero, "mel": mel.detach(), "g_grad": g_grad.detach(), "d_grad": zero,
+        }  # fmt: skip
 
     # --- discriminators: real (teacher) -> 1, fake (PairVC) -> 0 ---
     with autocast(device, amp_dtype):
@@ -529,7 +546,11 @@ def train(
             save_checkpoint(path, raw_g, raw_d, optimizers, schedulers, state, configs)
 
     def emit(event: dict[str, Any]) -> None:
-        if callback is not None and info.is_main:
+        if not info.is_main:
+            return
+        with open(output_dir / HISTORY_FILE, "a") as f:  # for plots after the run
+            f.write(json.dumps(event) + "\n")
+        if callback is not None:
             callback(event)
 
     def validate_and_save() -> None:
@@ -565,7 +586,7 @@ def train(
             batch = move_batch(batch, device)
             metrics = gan_step(
                 generator, discriminator, raw_d, batch, mel_loss, *optimizers, cfg,
-                lookahead, amp_dtype,
+                lookahead, amp_dtype, use_gan=state.step >= cfg.gan_start_step,
             )  # fmt: skip
             for scheduler in schedulers:
                 scheduler.step()
@@ -639,6 +660,10 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--lambda-adv", type=float, default=t.lambda_adv)
     opt.add_argument("--lambda-fm", type=float, default=t.lambda_fm)
     opt.add_argument("--lambda-mel", type=float, default=t.lambda_mel)
+    opt.add_argument(
+        "--gan-start-step", type=int, default=t.gan_start_step,
+        help="mel loss only (no discriminators) before this step: a fast warm-up",
+    )  # fmt: skip
     opt.add_argument("--precision", choices=["auto", "fp32", "bf16"], default=t.precision)
     opt.add_argument("--grad-checkpointing", action="store_true")
     opt.add_argument("--num-workers", type=int, default=t.num_workers)
@@ -693,6 +718,7 @@ def configs_from_args(
         lambda_adv=args.lambda_adv,
         lambda_fm=args.lambda_fm,
         lambda_mel=args.lambda_mel,
+        gan_start_step=args.gan_start_step,
         precision=args.precision,
         grad_checkpointing=args.grad_checkpointing,
         num_workers=args.num_workers,

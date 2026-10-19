@@ -147,6 +147,7 @@ Keep the other flags the same (the model shape must match the checkpoint).
 checkpoints/run/
   last.pt          everything, written at every validation (to resume)
   best.pt          same, at the lowest validation mel loss so far
+  history.jsonl    every logged train / val metric, one JSON object per line (for plots)
   samples/
     step_0001000.wav   source | PairVC | teacher, 0.5 s silence between them
 ```
@@ -224,6 +225,7 @@ but cost memory linearly; keep it a multiple of 320.
 | `--lr-decay` | 0.9999996 | LR multiplier per step |
 | `--grad-clip` | 0 (off) | max gradient norm |
 | `--lambda-mel` / `--lambda-fm` / `--lambda-adv` | 15 / 2 / 1 | loss weights |
+| `--gan-start-step` | 0 | mel loss only before this step (discriminators skipped, ~3-5x faster steps): a warm-up that helps short / CPU runs. The examples use 2500 |
 | `--precision` | auto | `auto` (bf16 if native, else fp32), `fp32`, `bf16` |
 | `--grad-checkpointing` | off | less memory, slower |
 | `--num-workers` | 4 | DataLoader processes (audio decoding) |

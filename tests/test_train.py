@@ -1,6 +1,7 @@
 """Tests for pairvc.train. CPU only, offline: tiny model, tiny synthetic data."""
 
 import dataclasses
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from pairvc.discriminators import Discriminators
 from pairvc.model import PairVC
 from pairvc.train import (
     BEST_CHECKPOINT,
+    HISTORY_FILE,
     LAST_CHECKPOINT,
     align_with_lookahead,
     build_dataloaders,
@@ -66,6 +68,8 @@ def test_training_run_logs_and_saves(data_config: DataConfig, tmp_path: Path) ->
     assert (tmp_path / "run" / LAST_CHECKPOINT).exists()
     assert (tmp_path / "run" / BEST_CHECKPOINT).exists()
     assert len(list((tmp_path / "run" / "samples").glob("*.wav"))) == 2
+    history = (tmp_path / "run" / HISTORY_FILE).read_text().splitlines()
+    assert [json.loads(line)["kind"] for line in history] == kinds  # same events, saved to disk
 
 
 def test_resume_continues_the_step_count(data_config: DataConfig, tmp_path: Path) -> None:
@@ -90,6 +94,16 @@ def test_mel_loss_goes_down(data_config: DataConfig, tmp_path: Path) -> None:
     run_training(data_config, config, callback=events.append, limit=2)
     mel = [e["mel"] for e in events if e["kind"] == "train"]
     assert sum(mel[-5:]) / 5 < 0.8 * sum(mel[:5]) / 5
+
+
+def test_mel_only_warm_up_skips_the_discriminators(data_config: DataConfig, tmp_path: Path) -> None:
+    """Before gan_start_step: no discriminator update, no GAN terms; after it: both."""
+    events = []
+    config = tiny_train_config(tmp_path / "run", max_steps=4, eval_every=4, gan_start_step=2)
+    run_training(data_config, config, callback=events.append)
+    train_events = [e for e in events if e["kind"] == "train"]
+    assert [e["d_loss"] == 0 and e["adv"] == 0 for e in train_events] == [True, True, False, False]
+    assert all(e["mel"] > 0 for e in train_events)
 
 
 def test_cli_overfit_flags(toy_data: Path, tmp_path: Path) -> None:
